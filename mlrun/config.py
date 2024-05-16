@@ -963,7 +963,21 @@ class Config:
 
     @staticmethod
     def internal_labels():
-        return ["kind", "host"]
+        return [
+            "kind",
+            "host",
+            "v3io_user",
+            "owner",
+            "mlrun/client_version",
+            "mlrun/client_python_version",
+            "mlrun/project",
+            "mlrun/uid",
+            "mlrun/name",
+            "dask.org/component",
+            "dask.org/cluster-name",
+            "mlrun/schedule-name",
+            "mlrun/runner-pod",
+        ]
 
     @staticmethod
     def get_storage_auto_mount_params():
