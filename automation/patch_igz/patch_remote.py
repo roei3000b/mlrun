@@ -39,14 +39,38 @@ class MLRunPatcher:
         mandatory_fields = {"DATA_NODES", "SSH_USER", "SSH_PASSWORD", "DOCKER_REGISTRY"}
         api_container = "mlrun-api"
         log_collector_container = "mlrun-log-collector"
+        mlrun = "mlrun"
+        images = {
+            api_container: {
+                "name": api_container,
+                "target": "api",
+                "image_name": "mlrun-api",
+            },
+            log_collector_container: {
+                "name": log_collector_container,
+                "target": "log-collector",
+                "image_name": "log-collector",
+            },
+            mlrun: {
+                "name": mlrun,
+                "target": "mlrun",
+                "image_name": "mlrun",
+            }
+        }
 
-    def __init__(self, conf_file, patch_file, reset_db, tag, log_collector):
+    def __init__(self, conf_file, patch_file, reset_db, tag, log_collector, mlrun):
         self._config = yaml.safe_load(conf_file)
         patch_yaml_data = yaml.safe_load(patch_file)
         self._deploy_patch = json.dumps(patch_yaml_data)
         self._reset_db = reset_db
         self._tag = tag
         self._patch_log_collector = bool(log_collector)
+        self._patch_mlrun = bool(mlrun)
+        self._images_to_build = [self.Consts.api_container]
+        if self._patch_log_collector:
+            self._images_to_build.append(self.Consts.log_collector_container)
+        if self._patch_mlrun:
+            self._images_to_build.append(self.Consts.mlrun)
         self._validate_config()
 
     def patch_mlrun_api(self):
@@ -57,31 +81,30 @@ class MLRunPatcher:
             nodes = [nodes]
 
         image_tag = self._get_image_tag(vers)
-        built_api_image = self._make_mlrun("api", image_tag, "mlrun-api")
-
-        built_images = [built_api_image]
-        built_log_collector_image = None
-        if self._patch_log_collector:
-            built_log_collector_image = self._make_mlrun(
-                "log-collector", image_tag, "log-collector"
+        built_images = {}
+        for image_to_build in self._images_to_build:
+            built_images[image_to_build] = self._make_mlrun(
+                self.Consts.images[image_to_build]["target"],
+                image_tag,
+                self.Consts.images[image_to_build]["image_name"],
             )
-            built_images.append(built_log_collector_image)
 
         self._docker_login_if_configured()
 
-        self._push_docker_images(built_images)
+        self._push_docker_images(built_images.values())
 
         node = nodes[0]
         self._connect_to_node(node)
         try:
             self._replace_deploy_policy()
-            self._replace_deployment_images(self.Consts.api_container, built_api_image)
-            if self._patch_log_collector:
-                # sanity
-                if not built_log_collector_image:
-                    raise RuntimeError("Log collector image not built")
+
+            for image_to_build in self._images_to_build:
+                if image_to_build not in built_images:
+                    raise RuntimeError(f"Image {image_to_build} not built")
+
+                built_image = built_images[image_to_build]
                 self._replace_deployment_images(
-                    self.Consts.log_collector_container, built_log_collector_image
+                    self.Consts.images[image_to_build]["name"], built_image
                 )
 
             if self._reset_db:
@@ -554,11 +577,17 @@ class MLRunPatcher:
     is_flag=True,
     help="Deploy the log collector as well",
 )
-def main(verbose, config, patch_file, reset_db, tag, log_collector):
+@click.option(
+    "-mm",
+    "--mlrun",
+    is_flag=True,
+    help="Deploy the mlrun/mlrun as well",
+)
+def main(verbose, config, patch_file, reset_db, tag, log_collector, mlrun):
     if verbose:
         coloredlogs.set_level(logging.DEBUG)
 
-    MLRunPatcher(config, patch_file, reset_db, tag, log_collector).patch_mlrun_api()
+    MLRunPatcher(config, patch_file, reset_db, tag, log_collector, mlrun).patch_mlrun_api()
 
 
 if __name__ == "__main__":
