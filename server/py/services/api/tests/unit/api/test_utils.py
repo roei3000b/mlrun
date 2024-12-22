@@ -78,6 +78,11 @@ def test_submit_run_sync(db: Session, client: TestClient):
     )
     assert response_data["data"]["action"] == "created"
 
+    schedule = get_scheduler().get_schedule(
+        db, project, submit_job_body["task"]["metadata"]["name"]
+    )
+    assert schedule.kind == mlrun.common.schemas.ScheduleKinds.job
+
     # submit again, make sure it was modified
     submit_job_body["schedule"] = "0 1 * * *"  # change schedule
     _, _, _, response_data = framework.api.utils.submit_run_sync(

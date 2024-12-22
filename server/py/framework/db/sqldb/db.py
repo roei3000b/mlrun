@@ -45,7 +45,6 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session, aliased
 
 import mlrun
-import mlrun.common.constants as mlrun_constants
 import mlrun.common.formatters
 import mlrun.common.model_monitoring
 import mlrun.common.runtimes.constants
@@ -3081,25 +3080,11 @@ class SQLDB(DBInterface):
 
         next_day = datetime.now(timezone.utc) + timedelta(hours=24)
 
-        # We check the workflow label because the schedule kind
-        # is not used properly (not setting pipelines kind for workflow schedules)
-        # TODO: fix the schedule kind to be pipeline when scheduling workflows
-        workflow_label_exists = (
-            select(Schedule.Label.parent)
-            .where(
-                (Schedule.Label.parent == Schedule.id)
-                & (Schedule.Label.name == mlrun_constants.MLRunInternalLabels.workflow)
-            )
-            .exists()
-        )
-
         query = (
             session.query(
                 Schedule.project.label("project_name"),
                 Schedule.name.label("schedule_name"),
-                case([(workflow_label_exists, True)], else_=False).label(
-                    "has_workflow_label"
-                ),
+                Schedule.kind,
             )
             .filter(Schedule.next_run_time < next_day)
             .filter(Schedule.next_run_time >= datetime.now(timezone.utc))
@@ -3110,8 +3095,8 @@ class SQLDB(DBInterface):
         project_to_schedule_pending_workflows_count = collections.defaultdict(int)
 
         for result in query:
-            project_name, schedule_name, is_workflow = result
-            if is_workflow:
+            project_name, schedule_name, kind = result
+            if kind == mlrun.common.schemas.ScheduleKinds.pipeline:
                 project_to_schedule_pending_workflows_count[project_name] += 1
             else:
                 project_to_schedule_pending_jobs_count[project_name] += 1

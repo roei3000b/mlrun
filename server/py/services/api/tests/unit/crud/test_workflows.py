@@ -74,6 +74,17 @@ class TestWorkflows(services.api.tests.unit.conftest.MockedK8sHelper):
                 0
             ].startswith("mlrun.notifications.")
 
+            assert (
+                services.api.utils.singletons.scheduler.get_scheduler().store_schedule.call_count
+                == 1
+            )
+            assert (
+                services.api.utils.singletons.scheduler.get_scheduler().store_schedule.call_args.kwargs[
+                    "kind"
+                ]
+                == mlrun.common.schemas.ScheduleKinds.pipeline
+            )
+
     @pytest.mark.parametrize(
         "source_code_target_dir",
         [
